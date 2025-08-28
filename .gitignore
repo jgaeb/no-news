@@ -5,6 +5,7 @@
 *.db
 data/*
 !data/no-news.db.gz
+!data/responses.csv
 logs/*
 !logs/.gitkeep
 plots/*

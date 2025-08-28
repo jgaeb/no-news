@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Python script for generating the events corresponding to a day's news."""
+"""Python script for embedding news segments, events, and issues using OpenAI API."""
 import argparse
 import asyncio
 import datetime

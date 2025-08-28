@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Python script for generating the events corresponding to a day's news."""
+"""Python script for generating the topics for categorizing news events."""
 import argparse
 import asyncio
 import logging
@@ -166,7 +166,7 @@ You suggest new topics by responding with a JSON object of the following form:
 ```json
 {
     "explanation": str,
-    "removals", [{"title": str, "id": int}],
+    "removals": [{"title": str, "id": int}],
     "additions": [{"title": str, "description": str}]
 }
 ```

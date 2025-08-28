@@ -22,14 +22,14 @@ from _models import MODELS, ModelContext, calculate_cost
 from _utils import handle_exceptions
 
 # Define the database
-DATABASE = pathlib.Path("data", "agenda-setting.db")
+DATABASE = pathlib.Path("data", "no-news.db")
 
 # Initialize API limits
 SERVICE = "AWS"
 MODEL = "haiku"
 
 # Define the database
-DATABASE = pathlib.Path("data", "agenda-setting.db")
+DATABASE = pathlib.Path("data", "no-news.db")
 
 # Create a semaphore for really big jobs to limit the number of concurrent tasks
 SEMAPHORE = asyncio.Semaphore(1000)
@@ -59,7 +59,7 @@ Here is a list of topics:
 4.  Corruption: Reports of government and private corruption, financial scams and
     racketeering, and bribery.
 5.  Foreign turmoil: Riots, terror attacks, crises, and disorder in foreign countries.
-6.  Natural Disasters: Extreme weather (hurricanes, floods, tornados, typhoons,
+6.  Natural Disasters: Extreme weather (hurricanes, floods, tornadoes, typhoons,
     blizzards, etc.), earthquakes, volcanic eruptions, wildfires, landslides and
     avalanches, etc.
 7.  Notices: Memorials, anniversaries, dedications, especially military; deaths, health
@@ -70,11 +70,13 @@ Here is a list of topics:
 10. Weather: Conventional weather reports for different parts of the US.
 11. Transportation Disasters: Plane crashes, train derailments, barges crashing, ferries
     sinking, etc.
-12. Manmade Disasters: Oil spills, toxic dumping, industrial accidents, fires.
-13. Animal attacks: Shark attacks, sting ray attacks, bear attacks, etc.
-14. The Pope: Papal visits, encyclicals, etc.
-15. The Queen / British Royal Family: Royal weddings, births, deaths, scandals, etc.
-16. Space Program: Shuttle launches, new space technology, reports on probes, landers,
+12. Medical and Health News: New drugs and medical technology, medical and public health
+    research, disease outbreaks, etc.
+13. Manmade Disasters: Oil spills, toxic dumping, industrial accidents, fires.
+14. Animal attacks: Shark attacks, sting ray attacks, bear attacks, etc.
+15. The Pope: Papal visits, encyclicals, etc.
+16. The Queen / British Royal Family: Royal weddings, births, deaths, scandals, etc.
+17. Space Program: Shuttle launches, new space technology, reports on probes, landers,
     etc.
 
 Your job is to categorize what topics different news segments cover. You should respond
@@ -86,9 +88,9 @@ with a JSON object as follows:
 }
 ```
 The `explanation` field should be a brief explanation of which topic is the best fit for
-for the news segment, as well as an explanation of whether that topic is a good fit for
-the particular news segment or not. If the news segment does not fit any of the topics
-you have been provided, you should respond with `null`. The `topic` field should be the
+the news segment, as well as an explanation of whether that topic is a good fit for the
+particular news segment or not. If the news segment does not fit any of the topics you
+have been provided, you should respond with `null`. The `topic` field should be the
 number of the issue that best fits the news segment.
 """
 
@@ -128,7 +130,7 @@ def generate_prompts(segments: List[sqlite3.Row]) -> None:
     tokens = 0
     prompts = []
     for segment in segments:
-        prompt = f"(segment['date']) {segment['title']}\n\n{segment['abstract']}"
+        prompt = f"{(segment['date'])} {segment['title']}\n\n{segment['abstract']}"
         payload = json.dumps(
             {
                 "recordId": f"{segment['id']:011}",
@@ -313,6 +315,16 @@ async def chat(
 
             response = ModelOutput.parse_raw(response_str)
 
+            # Check if the response is valid
+            if response.topic is not None and not (1 <= response.topic <= 17):
+                logging.error(
+                    "Invalid topic %s for segment ID %i: %s",
+                    response.topic,
+                    segment["id"],
+                    response,
+                )
+                return
+
             # Save the response to the database
             async with conn.cursor() as cur:
                 # NOTE: We use the sentinel value -1 when the issue is not set
@@ -347,6 +359,7 @@ async def main() -> None:
     parser.add_argument("action", choices=["upload", "start_job", "process", "chat"])
     parser.add_argument("--log", default="INFO")
     parser.add_argument("--job-name", type=str)
+    parser.add_argument("--limit", type=int, default=1000)
     args = parser.parse_args()
 
     # If starting a job, check for job name
@@ -377,8 +390,9 @@ async def main() -> None:
             AND issue_id = -1
             AND other_id IS NULL
             AND program LIKE '%Evening News'
+            LIMIT ?
             """
-            cur.execute(query)
+            cur.execute(query, (args.limit,))
 
             segments = cur.fetchall()
 
@@ -407,8 +421,9 @@ async def main() -> None:
             AND issue_id = -1
             AND other_id IS NULL
             AND program LIKE '%Evening News'
+            LIMIT ?
             """
-            await cur.execute(query)
+            await cur.execute(query, (args.limit,))
 
             segments = await cur.fetchall()
 

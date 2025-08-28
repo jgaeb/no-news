@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Python script for generating the events corresponding to a day's news."""
+"""Python script for classifying news segments."""
 import argparse
 import asyncio
 import datetime
@@ -57,7 +57,7 @@ ISSUES = {}
 with sqlite3.connect(DATABASE, detect_types=sqlite3.PARSE_DECLTYPES) as conn:
     conn.row_factory = sqlite3.Row
     TOPICS = conn.execute("SELECT id, title, description FROM topics").fetchall()
-    for year in range(1968, 2020):
+    for year in range(1968, 2025):
         ISSUES[year] = conn.execute(
             "SELECT id, title, description FROM issues WHERE year = ?",
             (year,),
@@ -642,7 +642,8 @@ async def main() -> None:
                     query = """
                     SELECT id, strftime('%Y', date) AS year
                     FROM segments
-                    WHERE date BETWEEN ? AND ?
+                    WHERE issue_id IS NULL
+                    AND date BETWEEN ? AND ?
                     AND NOT empty
                     AND NOT commercial
                     AND program LIKE '%Evening News'
@@ -651,7 +652,7 @@ async def main() -> None:
                     query = """
                     SELECT id, strftime('%Y', date) AS year
                     FROM segments
-                    WHERE topic_id IS NULL
+                    WHERE (topic_id IS NULL OR hard_news IS NULL)
                     AND date BETWEEN ? AND ?
                     AND NOT empty
                     AND NOT commercial

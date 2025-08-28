@@ -26,7 +26,7 @@ client = openai.AsyncOpenAI(
 
 
 @lru_cache(maxsize=1)
-def get_encoding(model: str) -> str:
+def get_encoding(model: str) -> tiktoken.Encoding:
     """Get the encoding for the GPT model."""
     return tiktoken.encoding_for_model(model)
 

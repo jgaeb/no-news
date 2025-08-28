@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Python script for generating the events corresponding to a day's news."""
+"""Python script for generating the issues corresponding to a year's news."""
 import argparse
 import asyncio
 import logging
@@ -34,9 +34,9 @@ on what was in the news. You respond with a JSON object as follows:
     "revisions": [{"old_title": str, "new_title": str}, ...]
 }
 ```
-The string in the `title` field a short title for the issue (e.g., "Stagflation"
-or "The Iraq War") and the string in the `description` field should be a brief
-(but accurate) one-sentence summary of the issue.
+The string in the `title` field is a short title for the issue (e.g., "Stagflation" or
+"The Iraq War") and the string in the `description` field should be a brief (but
+accurate) one-sentence summary of the issue.
 
 It is *very* important that the titles of issues maintain continuity across years (even
 though the descriptions may change), so if they are available, you will be provided with
@@ -71,6 +71,7 @@ should take the form of a JSON object as follows:
     "title": str,
     "approved": bool
 }
+```
 The key here is that your job is to ensure that:
 * The issue title makes sense for all years.
 * The issues really are the "same." For example, "The Iraq War" and "The War in Iraq"

@@ -7,6 +7,7 @@ groundhog.library("
   DBI
   dbplyr
   fs
+  glue
   scales
   lubridate
   tidyverse
@@ -126,7 +127,7 @@ segments <- tbl(con, "segments") %>%
 #     start = min(id),
 #     .groups = "drop"
 #   )
-# 
+#
 # ends <- segments %>%
 #   filter(str_detect(title, "(?i)^good ?night")) %>%
 #   group_by(date, outlet) %>%
@@ -134,7 +135,7 @@ segments <- tbl(con, "segments") %>%
 #     end = max(id),
 #     .groups = "drop"
 #   )
-# 
+#
 # # Join the start and end segments onto the main data
 # segments <- segments %>%
 #   left_join(starts, by = c("date", "outlet")) %>%
@@ -272,17 +273,18 @@ p_composition <- segments %>%
         & other_id %in% high_quality_indices
       ) * duration,
       na.rm = TRUE
-    ), 
+    ),
     dur_other_low = sum(
       (
         hard_news & !empty & !commercial & issue_id == -1
-        & !other_id %in% high_quality_indices
+        & !(other_id %in% high_quality_indices)
       ) * duration,
       na.rm = TRUE
     ),
     dur_rest = sum(
       (hard_news & !empty & !commercial & issue_id != -1) * duration,
-      na.rm = TRUE),
+      na.rm = TRUE
+    ),
     dur_total = sum(duration, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -366,12 +368,82 @@ ggsave(
   height = 2.5
 )
 
+# Create appendix plot showing the breakdown among `other_id` topics over the
+# years
+p_other <- segments %>%
+  filter(!empty, !commercial, hard_news, issue_id == -1) %>%
+  select(id, date, outlet, duration, other_id) %>%
+  group_by(decade = year(date) %/% 5, other_id) %>%
+  summarize(dur = sum(duration, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    other_id = factor(
+      other_id,
+      levels = c(-1, seq(17)),
+      labels = c(
+        "Other",
+        "Business news",
+        "Government procedure",
+        "Foreign politics",
+        "Corruption",
+        "Foreign turmoil",
+        "Natural disasters",
+        "Notices",
+        "Trials",
+        "Crime",
+        "Weather",
+        "Transportation disasters",
+        "Medical and health news",
+        "Manmade disasters",
+        "Animal attacks",
+        "The Pope",
+        "The Queen / British royal family",
+        "Space program"
+      )
+    ),
+    # Use the ordered factor levels for `other_id`
+    other_id = fct_reorder(other_id, dur, .fun = sum, .desc = TRUE)
+  ) %>%
+  group_by(decade) %>%
+  mutate(p = dur / sum(dur)) %>%
+  ungroup() %>%
+  ggplot(aes(x = decade * 5, y = p, fill = other_id)) +
+  geom_area(position = "stack", color = "black") +
+  scale_x_continuous(
+    breaks = seq(1960, 2020, by = 5),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(),
+    limits = c(0, 1),
+    expand = expansion(mult = c(0, 0)),
+    oob = oob_keep
+  ) +
+  labs(
+    title = "Non-Issue Hard News",
+    x = "Year",
+    y = "Proportion of News Time",
+    fill = NULL
+  ) +
+  guides(fill = guide_legend(ncol = 3)) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    plot.margin = margin(t = 0, r = 11, b = 0, l = 5.5)
+  )
+
+ggsave(
+  path("plots", "other.pdf"),
+  p_other,
+  width = 6.5,
+  height = 6
+)
+
 ################################################################################
-# Calculate how much time is spent on the top ten issues in 1969 and 2019
+# Calculate how much time is spent on the top ten issues in 1969 and 2024
 
 top_ten <- segments %>%
   select(id, date, outlet, duration, issue_id) %>%
-  filter(year(date) %in% c(1969, 2019)) %>%
+  filter(year(date) %in% c(1969, 2024)) %>%
   left_join(issues, by = join_by(issue_id == id)) %>%
   replace_na(list(title = "Unclassified")) %>%
   group_by(date, outlet, title) %>%
@@ -383,6 +455,7 @@ top_ten <- segments %>%
   filter(title != "Unclassified") %>%
   group_by(year) %>%
   arrange(year, desc(dur)) %>%
+  slice_head(n = 10) %>%
   mutate(title = factor(title, levels = title)) %>%
   ungroup()
 
@@ -405,9 +478,9 @@ p_1969 <- top_ten %>%
     plot.margin = margin(t = 0, r = 5.5, b = 0, l = 0)
   )
 
-# Plot for 2019 with text on right
-p_2019 <- top_ten %>%
-  filter(year == 2019) %>%
+# Plot for 2024 with text on right
+p_2024 <- top_ten %>%
+  filter(year == 2024) %>%
   ggplot(aes(x = dur, y = title, fill = title)) +
   geom_bar(stat = "identity", show.legend = FALSE) +
   scale_fill_viridis_d() +
@@ -426,15 +499,15 @@ p_2019 <- top_ten %>%
   )
 
 # Combine plots with a shared bottom title
-p_top_ten <- p_1969 + p_2019 +
+p_top_ten <- p_1969 + p_2024 +
   plot_layout(widths = c(1, 1), axis = 'collect') +
   plot_annotation(
-    title = "Coverage of Top Ten Issues in 1969 and 2019",
+    title = "Coverage of Top Ten Issues in 1969 and 2024",
     theme = theme(
       plot.title = element_text(hjust = 0.5),
       plot.margin = margin(t = 1, r = 0, b = 0, l = 0)
     )
-  ) 
+  )
 
 ggsave(
   path("plots", "top-ten.pdf"),
@@ -454,14 +527,14 @@ ggsave(
 #   with(c(country, adjective)) %>%
 #   str_c(collapse = "|") %>%
 #   str_c("(?i)\\b(", ., ")\\b")
-# 
+#
 # intl_red_re <- read_csv("_country_list.csv", show_col_types = FALSE) %>%
 #   filter(!str_detect(country, "Iraq|Afghanistan")) %>%
 #   mutate_all(str_to_lower) %>%
 #   with(c(country, adjective)) %>%
 #   str_c(collapse = "|") %>%
 #   str_c("(?i)\\b(", ., ")\\b")
-# 
+#
 # # Determine whether each segment is international
 # intl <- segments %>%
 #   filter(!empty, !commercial, hard_news) %>%
@@ -521,7 +594,8 @@ p_intl <- intl %>%
   ) +
   guides(color = guide_legend(ncol = 1)) +
   theme(
-    legend.position = c(0.5, 0.1),
+    legend.position = "inside",
+    legend.position.inside = c(0.5, 0.1),
     plot.margin = margin(0, 5.5, 0, 5.5),
     legend.text = element_text(size = 6),
     legend.background = element_blank(),
@@ -530,8 +604,247 @@ p_intl <- intl %>%
   )
 
 ggsave(
-  "plots/intl.pdf",
+  path("plots", "intl.pdf"),
   p_intl,
-  width = 2.5,
+  width = 3,
   height = 2.5
+)
+
+################################################################################
+
+# Load the response data
+responses <- read_csv(
+    path("data", "responses.csv"),
+    col_types = cols(.default = "c")
+  ) %>%
+  pivot_longer(
+    cols = starts_with("segment_"),
+    names_to = c("segment", ".value"),
+    names_pattern = glue(
+      "segment_(\\d+)_(news_type|issue_primary|issue_secondary|topic_primary|",
+      "topic_secondary)"
+    ),
+    values_drop_na = TRUE
+  ) %>%
+  pivot_longer(
+    cols = c(news_type, issue_primary, issue_secondary, topic_primary, topic_secondary),
+    names_to = "variable",
+    values_to = "value",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(segment = as.integer(segment))
+
+# Load model data
+model_label <- tbl(con, "segments") %>%
+  filter(id %in% responses$segment) %>%
+  collect() %>%
+  left_join(rename(topics, topic = title), by = c("topic_id" = "id")) %>%
+  left_join(rename(issues, issue = title), by = c("issue_id" = "id")) %>%
+  transmute(
+    segment = id,
+    news_type = if_else(
+      hard_news == 1,
+      "Hard News (e.g., politics, economics, crime)",
+      "Soft News (e.g., entertainment, sports, human interest)"
+    ),
+    topic = topic,
+    issue = issue
+  ) %>%
+  replace_na(
+    list(
+      topic = "No topic matches this abstract.",
+      issue = "This abstract does not match any of the issues."
+    )
+  ) %>%
+  pivot_longer(
+    cols = c(news_type, issue, topic),
+    names_to = "variable",
+    values_to = "value",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(
+    variable = factor(variable, levels = c("news_type", "topic", "issue"))
+  ) %>%
+  arrange(segment, variable)
+
+# Calculate the majority vote for each segment
+gold_label <- responses %>%
+  count(segment, variable, value) %>%
+  # Add half points for secondary issues/topics
+  mutate(
+    n = if_else(str_detect(variable, "secondary"), n / 2, n),
+    type = str_extract(variable, "news_type|issue|topic"),
+    type = factor(type, levels = c("news_type", "topic", "issue"))
+  ) %>%
+  group_by(segment, type, value) %>%
+  summarise(n = sum(n), .groups = "drop") %>%
+  group_by(segment, type) %>%
+  slice_max(n, n = 1, with_ties = TRUE) %>%
+  arrange(segment, type) %>%
+  mutate(
+    variable_primary = if_else(type == "news_type", type, str_c(type, "_primary")),
+    variable_secondary = if_else(type == "news_type", type, str_c(type, "_secondary"))
+  ) %>%
+  ungroup()
+
+# Calculate the average accuracy of the human responses
+accuracy_human <- responses %>%
+  filter(! variable %in% c("issue_secondary", "topic_secondary")) %>%
+  left_join(
+    select(gold_label, -variable_secondary),
+    by = join_by(
+      segment == segment,
+      variable == variable_primary,
+      value == value
+    )
+  ) %>%
+  mutate(correct = if_else(is.na(n), FALSE, TRUE)) %>%
+  filter(! variable %in% c("issue_secondary", "topic_secondary")) %>%
+  mutate(
+    variable = factor(
+      variable,
+      levels = c("news_type", "topic_primary", "issue_primary"),
+      labels = c("news_type", "topic", "issue")
+    )
+  ) %>%
+  group_by(variable) %>%
+  summarize(
+    std.err = sd(correct) / sqrt(n()),
+    mean = mean(correct),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    rater = "human",
+    outcome = "correct"
+  )
+
+# Calculate the average accuracy of the model responses
+accuracy_model <- model_label %>%
+  left_join(
+    select(gold_label, -variable_secondary),
+    by = join_by(
+      segment == segment,
+      variable == type,
+      value == value
+    )
+  ) %>%
+  mutate(correct = if_else(is.na(n), FALSE, TRUE)) %>%
+  group_by(variable) %>%
+  summarize(
+    std.err = sd(correct) / sqrt(n()),
+    mean = mean(correct),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    rater = "model",
+    outcome = "correct"
+  )
+
+# Calculate the probability that two random human responses are the same
+rand_human <- responses %>%
+  filter(! variable %in% c("issue_secondary", "topic_secondary")) %>%
+  mutate(
+    variable = factor(
+      variable,
+      levels = c("news_type", "topic_primary", "issue_primary"),
+      labels = c("news_type", "topic", "issue")
+    )
+  ) %>%
+  count(variable, segment, value) %>%
+  group_by(variable, segment) %>%
+  summarize(
+    num = sum(n * (n - 1) / 2),
+    tot = sum(n) * (sum(n) - 1) / 2,
+    .groups = "drop_last"
+  ) %>%
+  summarize(
+    mean = sum(num) / sum(tot),
+    std.err = sqrt(mean * (1 - mean) / sum(tot))
+  ) %>%
+  mutate(
+    rater = "human",
+    outcome = "random"
+  )
+
+# Calculate the probability that a random human response is the same as the
+# model response
+rand_model <- responses %>%
+  filter(! variable %in% c("issue_secondary", "topic_secondary")) %>%
+  mutate(
+    variable = factor(
+      variable,
+      levels = c("news_type", "topic_primary", "issue_primary"),
+      labels = c("news_type", "topic", "issue")
+    )
+  ) %>%
+  left_join(
+    select(model_label, segment, variable, value),
+    by = join_by(segment == segment, variable == variable),
+    suffix = c("_human", "_model")
+  ) %>%
+  group_by(variable) %>%
+  summarize(
+    mean = mean(value_human == value_model, na.rm = TRUE),
+    std.err = sd(value_human == value_model, na.rm = TRUE) / sqrt(n())
+  ) %>%
+  mutate(
+    rater = "model",
+    outcome = "random"
+  )
+
+# Plot the results
+p_agreement <- bind_rows(
+    accuracy_human,
+    accuracy_model,
+    rand_human,
+    rand_model
+  ) %>%
+  mutate(
+    rater = factor(
+      rater,
+      levels = c("human", "model"),
+      labels = c("Human Experts", "Model")
+    ),
+    outcome = factor(
+      outcome,
+      levels = c("correct", "random"),
+      labels = c(
+        "Proportion \"correct\"",
+        "Probability of agreement"
+      )
+    ),
+    variable = factor(
+      variable,
+      levels = c("news_type", "topic", "issue"),
+      labels = c("Hard vs. soft news", "Topic", "Issue")
+    )
+  ) %>%
+  ggplot(aes(x = variable, y = mean, fill = rater)) +
+  geom_col(position = position_dodge(width = 0.9), width = 0.8) +
+  geom_errorbar(
+    aes(ymin = mean - 1.96 * std.err, ymax = mean + 1.96 * std.err),
+    position = position_dodge(width = 0.9),
+    width = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, by = 0.1),
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0)
+  ) +
+  facet_wrap(~ outcome) +
+  labs(
+    x = "Aspect",
+    y = "Proportion Correct",
+    fill = "Rater"
+  ) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+ggsave(
+  path("plots", "validation.pdf"),
+  plot = p_agreement,
+  width = 6,
+  height = 4,
+  device = cairo_pdf
 )

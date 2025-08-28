@@ -5,7 +5,7 @@ suppressPackageStartupMessages(library(fs))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(tidyverse))
 
-# If media-bias.db does not exist, abort
+# If no-news.db does not exist, abort
 if (!file_exists(path("data", "no-news.db"))) {
   message("no-news.db does not exist. Create it with `schema.sql`.")
   quit()

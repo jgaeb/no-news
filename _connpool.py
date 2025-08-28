@@ -7,8 +7,6 @@ import os
 from aiobotocore.session import get_session  # type: ignore
 from botocore.config import Config  # type: ignore
 
-from _utils import adapt_date, convert_date
-
 # Initialize the AWS session
 try:
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")

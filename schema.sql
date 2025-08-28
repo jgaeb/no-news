@@ -27,9 +27,10 @@ CREATE TABLE IF NOT EXISTS segments (
   outlet TEXT NOT NULL,
   program TEXT NOT NULL,
   date DATE NOT NULL,
+  /* NOTE: These fields are removed from the public release
   title TEXT,
   abstract TEXT,
-  reporter TEXT,
+  reporter TEXT, */
   duration INTEGER,
   commercial BOOLEAN NOT NULL,
   empty BOOLEAN NOT NULL,
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS segments (
   intl_red BOOLEAN,
   FOREIGN KEY (event_id) REFERENCES events(id),
   FOREIGN KEY (issue_id) REFERENCES issues(id),
-  FOREIGN KEY (topic_id) REFERENCES events(id)
+  FOREIGN KEY (topic_id) REFERENCES topic(id)
 );
 CREATE INDEX IF NOT EXISTS segments_date ON segments (date);
 CREATE INDEX IF NOT EXISTS segments_event_id ON segments (event_id);
